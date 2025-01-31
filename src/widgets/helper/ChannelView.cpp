@@ -930,11 +930,101 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
     this->channel_ = std::make_unique<Channel>(underlyingChannel->getName(),
                                                underlyingChannel->getType());
 
+    bool isMultiTwitch = underlyingChannel->isMultiTwitch();
+
     //
     // Proxy channel connections
     // Use a proxy channel to keep filtered messages past the time they are removed from their origin channel
     //
+    size_t nMessagesAdded = 0;
+    if (isMultiTwitch) {
+        auto multiChannel = dynamic_cast<TwitchMultiChannel *>(underlyingChannel.get());
+        if (multiChannel != nullptr) {
+            for (const auto &channel : multiChannel->getChannels()) {
+                nMessagesAdded += this->connectProxyChannel(channel);
+            }
+        }
+    } else
+    {
+        nMessagesAdded = this->connectProxyChannel(underlyingChannel);
+    }
 
+    this->scrollBar_->setMaximum(
+        static_cast<qreal>(std::min(nMessagesAdded, this->messages_.limit())));
+
+    //
+    // Standard channel connections
+    //
+
+    // on new message
+    this->channelConnections_.managedConnect(
+        this->channel_->messageAppended,
+        [this](MessagePtr &message,
+               std::optional<MessageFlags> overridingFlags) {
+            this->messageAppended(message, overridingFlags);
+        });
+
+    this->channelConnections_.managedConnect(
+        this->channel_->messagesAddedAtStart,
+        [this](std::vector<MessagePtr> &messages) {
+            this->messageAddedAtStart(messages);
+        });
+
+    // on message replaced
+    this->channelConnections_.managedConnect(
+        this->channel_->messageReplaced,
+        [this](size_t index, const MessagePtr &prev,
+               const MessagePtr &replacement) {
+            this->messageReplaced(index, prev, replacement);
+        });
+
+    // on messages filled in
+    this->channelConnections_.managedConnect(this->channel_->filledInMessages,
+                                             [this](const auto &) {
+                                                 this->messagesUpdated();
+                                             });
+
+    this->underlyingChannel_ = underlyingChannel;
+
+    this->updateID();
+
+    this->queueLayout();
+    if (!this->isVisible() && !this->scrollBar_->isVisible())
+    {
+        // If we're not visible and the scrollbar is not (yet) visible,
+        // we need to make sure that it's at the bottom when this view is laid
+        // out later.
+        this->scrollBar_->scrollToBottom();
+    }
+    this->queueUpdate();
+
+    // Notifications
+    auto notificationCallback = [this](TwitchChannel* twitchChannel) {
+        this->channelConnections_.managedConnect(
+            twitchChannel->streamStatusChanged, [this]() {
+                this->liveStatusChanged.invoke();
+            });
+    };
+
+    if (isMultiTwitch) {
+        auto multiChannel = dynamic_cast<TwitchMultiChannel *>(underlyingChannel.get());
+        if (multiChannel != nullptr) {
+            for (const auto &channel : multiChannel->getChannels()) {
+                notificationCallback(dynamic_cast<TwitchChannel*>(channel.get()));
+            }
+        }
+    } else
+    {
+        auto *twitchChannel =
+            dynamic_cast<TwitchChannel *>(underlyingChannel.get());
+        if (twitchChannel != nullptr)
+        {
+            notificationCallback(twitchChannel);
+        }
+    }
+}
+
+size_t ChannelView::connectProxyChannel(const ChannelPtr &underlyingChannel) {
     this->channelConnections_.managedConnect(
         underlyingChannel->messageAppended,
         [this](MessagePtr &message,
@@ -1034,65 +1124,7 @@ void ChannelView::setChannel(const ChannelPtr &underlyingChannel)
         }
     }
 
-    this->scrollBar_->setMaximum(
-        static_cast<qreal>(std::min(nMessagesAdded, this->messages_.limit())));
-
-    //
-    // Standard channel connections
-    //
-
-    // on new message
-    this->channelConnections_.managedConnect(
-        this->channel_->messageAppended,
-        [this](MessagePtr &message,
-               std::optional<MessageFlags> overridingFlags) {
-            this->messageAppended(message, overridingFlags);
-        });
-
-    this->channelConnections_.managedConnect(
-        this->channel_->messagesAddedAtStart,
-        [this](std::vector<MessagePtr> &messages) {
-            this->messageAddedAtStart(messages);
-        });
-
-    // on message replaced
-    this->channelConnections_.managedConnect(
-        this->channel_->messageReplaced,
-        [this](size_t index, const MessagePtr &prev,
-               const MessagePtr &replacement) {
-            this->messageReplaced(index, prev, replacement);
-        });
-
-    // on messages filled in
-    this->channelConnections_.managedConnect(this->channel_->filledInMessages,
-                                             [this](const auto &) {
-                                                 this->messagesUpdated();
-                                             });
-
-    this->underlyingChannel_ = underlyingChannel;
-
-    this->updateID();
-
-    this->queueLayout();
-    if (!this->isVisible() && !this->scrollBar_->isVisible())
-    {
-        // If we're not visible and the scrollbar is not (yet) visible,
-        // we need to make sure that it's at the bottom when this view is laid
-        // out later.
-        this->scrollBar_->scrollToBottom();
-    }
-    this->queueUpdate();
-
-    // Notifications
-    auto *twitchChannel =
-        dynamic_cast<TwitchChannel *>(underlyingChannel.get());
-    if (twitchChannel != nullptr)
-    {
-        this->channelConnections_.managedConnect(
-            twitchChannel->streamStatusChanged, [this]() {
-                this->liveStatusChanged.invoke();
-            });
-    }
+    return nMessagesAdded;
 }
 
 void ChannelView::setFilters(const QList<QUuid> &ids)
@@ -1415,7 +1447,9 @@ MessageElementFlags ChannelView::getFlags() const
             this->underlyingChannel_ ==
                 getApp()->getTwitch()->getLiveChannel() ||
             this->underlyingChannel_ ==
-                getApp()->getTwitch()->getAutomodChannel())
+                getApp()->getTwitch()->getAutomodChannel() ||
+            (this->underlyingChannel_ != nullptr &&
+             this->underlyingChannel_->getType() == Channel::Type::TwitchMulti))
         {
             flags.set(MessageElementFlag::ChannelName);
             flags.unset(MessageElementFlag::ChannelPointReward);
@@ -1423,7 +1457,8 @@ MessageElementFlags ChannelView::getFlags() const
     }
 
     if (this->sourceChannel_ == getApp()->getTwitch()->getMentionsChannel() ||
-        this->sourceChannel_ == getApp()->getTwitch()->getAutomodChannel())
+        this->sourceChannel_ == getApp()->getTwitch()->getAutomodChannel() ||
+        (this->sourceChannel_ != nullptr && this->sourceChannel_->getType() == Channel::Type::TwitchMulti))
     {
         flags.set(MessageElementFlag::ChannelName);
     }

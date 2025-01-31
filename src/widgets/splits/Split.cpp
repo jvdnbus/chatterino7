@@ -915,18 +915,33 @@ void Split::setChannel(IndirectChannel newChannel)
     this->roomModeChangedConnection_.disconnect();
     this->indirectChannelChangedConnection_.disconnect();
 
-    TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
+    auto userStateCallback = [this] {
+        this->header_->updateIcons();
+        this->header_->updateRoomModes();
+    };
 
-    if (tc != nullptr)
+    auto roomModeCallback = [this] {
+        this->header_->updateRoomModes();
+    };
+
+    if (newChannel.get()->isMultiTwitch())
     {
-        this->usermodeChangedConnection_ = tc->userStateChanged.connect([this] {
-            this->header_->updateIcons();
-            this->header_->updateRoomModes();
-        });
-
-        this->roomModeChangedConnection_ = tc->roomModesChanged.connect([this] {
-            this->header_->updateRoomModes();
-        });
+        TwitchMultiChannel * channels = dynamic_cast<TwitchMultiChannel *>(newChannel.get().get());
+        for (const auto& channel : channels->getChannels()) {
+            auto *tc = dynamic_cast<TwitchChannel *>(channel.get());
+            if (tc != nullptr)
+            {
+                channels->addUsermodeChangedConnection(tc->userStateChanged.connect(userStateCallback));
+                channels->addRoomModeChangedConnection(tc->roomModesChanged.connect(roomModeCallback));
+            }
+        }
+    } else {
+        TwitchChannel *tc = dynamic_cast<TwitchChannel *>(newChannel.get().get());
+        if (tc != nullptr)
+        {
+            this->usermodeChangedConnection_ = tc->userStateChanged.connect(userStateCallback);
+            this->roomModeChangedConnection_ = tc->roomModesChanged.connect(roomModeCallback);
+        }
     }
 
     this->indirectChannelChangedConnection_ =

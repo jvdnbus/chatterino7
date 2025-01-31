@@ -819,8 +819,7 @@ void TwitchIrcServer::initializeConnection(IrcConnection *connection,
     this->open(type);
 }
 
-std::shared_ptr<Channel> TwitchIrcServer::createChannel(
-    const QString &channelName)
+std::shared_ptr<Channel> TwitchIrcServer::createChannel(const QString &channelName)
 {
     auto channel = std::make_shared<TwitchChannel>(channelName);
     channel->initialize();
@@ -1551,6 +1550,20 @@ ChannelPtr TwitchIrcServer::getOrAddChannel(const QString &dirtyChannelName)
     if (chan != Channel::getEmpty())
     {
         return chan;
+    }
+
+    if (channelName.contains(',')) {
+        QStringList channelNames = channelName.split(',');
+        auto channels = std::make_shared<TwitchMultiChannel>(channelName);
+        for (const auto &cn : channelNames)
+        {
+            ChannelPtr chPtr = this->getOrAddChannel(cn.trimmed());
+            if (chPtr->isTwitchChannel())
+            {
+                channels->addChannel(chPtr);
+            }
+        }
+        return channels;
     }
 
     std::lock_guard<std::mutex> lock(this->channelMutex);

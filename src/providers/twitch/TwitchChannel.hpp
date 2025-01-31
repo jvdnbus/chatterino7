@@ -61,7 +61,7 @@ class TwitchIrcServer;
 
 const int MAX_QUEUED_REDEMPTIONS = 16;
 
-class TwitchChannel final : public Channel, public ChannelChatters
+class TwitchChannel : public Channel, public ChannelChatters
 {
 public:
     /**
@@ -509,6 +509,29 @@ private:
     friend class IrcMessageHandler;
     friend class Commands_E2E_Test;
     friend class ::TestIrcMessageHandlerP;
+};
+
+class TwitchMultiChannel : public Channel
+{
+public:
+    explicit TwitchMultiChannel(const QString &channelName);
+    ~TwitchMultiChannel() override;
+
+    TwitchMultiChannel(const TwitchMultiChannel &) = delete;
+    TwitchMultiChannel(TwitchMultiChannel &&) = delete;
+    TwitchMultiChannel &operator=(const TwitchMultiChannel &) = delete;
+    TwitchMultiChannel &operator=(TwitchMultiChannel &&) = delete;
+
+    void addChannel(const ChannelPtr& channel);
+    void addUsermodeChangedConnection(const pajlada::Signals::Connection &con);
+    void addRoomModeChangedConnection(const pajlada::Signals::Connection &con);
+    const std::vector<ChannelPtr> &getChannels() const;
+
+private:
+    std::vector<ChannelPtr> channels_;
+
+    std::vector<pajlada::Signals::Connection> usermodeChangedConnections_;
+    std::vector<pajlada::Signals::Connection> roomModeChangedConnections_;
 };
 
 }  // namespace chatterino

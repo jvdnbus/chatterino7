@@ -39,6 +39,7 @@ public:
         None,
         Direct,
         Twitch,
+        TwitchMulti,
         TwitchWhispers,
         TwitchWatching,
         TwitchMentions,
@@ -74,6 +75,7 @@ public:
     virtual const QString &getDisplayName() const;
     virtual const QString &getLocalizedName() const;
     bool isTwitchChannel() const;
+    bool isMultiTwitch() const;
     virtual bool isEmpty() const;
     LimitedQueueSnapshot<MessagePtr> getMessageSnapshot();
 

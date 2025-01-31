@@ -386,6 +386,9 @@ private:
 
     FilterSetPtr channelFilters_;
 
+    // Sets up the channel connections and returns amount of messages added
+    size_t connectProxyChannel(const ChannelPtr &channel);
+
     // Returns true if message should be included
     bool shouldIncludeMessage(const MessagePtr &message) const;
 

@@ -61,6 +61,11 @@ bool Channel::isTwitchChannel() const
     return this->type_ >= Type::Twitch && this->type_ < Type::TwitchEnd;
 }
 
+bool Channel::isMultiTwitch() const
+{
+    return this->type_ == Type::TwitchMulti;
+}
+
 bool Channel::isEmpty() const
 {
     return this->name_.isEmpty();
