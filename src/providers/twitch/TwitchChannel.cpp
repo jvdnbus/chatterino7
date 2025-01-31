@@ -2160,23 +2160,9 @@ void TwitchChannel::upsertPersonalSeventvEmotes(
     this->replaceMessage(message.value(), cloned);
 }
 
-//TwitchChannel::TwitchChannel(const QString &name)
-//    : Channel(name, Channel::Type::Twitch)
-//    , ChannelChatters(*static_cast<Channel *>(this))
-//    , nameOptions{name, name, name}
-//    , subscriptionUrl_("https://www.twitch.tv/subs/" + name)
-//    , channelUrl_("https://twitch.tv/" + name)
-//    , popoutPlayerUrl_(TWITCH_PLAYER_URL.arg(name))
-//    , localTwitchEmotes_(std::make_shared<EmoteMap>())
-//    , bttvEmotes_(std::make_shared<EmoteMap>())
-//    , ffzEmotes_(std::make_shared<EmoteMap>())
-//    , seventvEmotes_(std::make_shared<EmoteMap>())
-//{
-
 TwitchMultiChannel::TwitchMultiChannel(const QString &name)
     : Channel(name, Channel::Type::TwitchMulti)
 {
-
 }
 
 TwitchMultiChannel::~TwitchMultiChannel() {
